@@ -174,26 +174,87 @@ function loadSeats() {
     const roundId = document.getElementById('round-select').value;
     if(!roundId) return;
 
+    // อ้างอิงไปยังที่นั่งของรอบนั้นๆ
     db.ref(`seats/${roundId}`).on('value', (snap) => {
         const seats = snap.val();
         const map = document.getElementById('seat-map');
         map.innerHTML = '';
-        selectedSeatId = null;
+        
+        const now = Date.now();
+        const TIMEOUT = 60000; // 1 นาที (ถ้าเลือกค้างไว้เกินนี้จะกลับเป็นสีเขียว)
 
         for (let key in seats) {
             const s = seats[key];
             const div = document.createElement('div');
-            div.className = `seat ${s.status === 'booked' ? 'booked' : ''}`;
+            let statusClass = 'available';
+
+            // 1. เช็คว่าจองแล้วหรือยัง (สีแดง)
+            if (s.status === 'booked') {
+                statusClass = 'booked';
+            } 
+            // 2. เช็คว่าแอดมินปิดการใช้งานหรือไม่ (สีเทา)
+            else if (s.status === 'disabled') {
+                statusClass = 'disabled';
+            }
+            // 3. เช็คว่ามีคนกำลังเลือกอยู่หรือไม่ (สีเหลือง)
+            // เช็คว่ามีคนจอง UID ไว้ และเวลาที่เลือกยังไม่เกิน timeout
+            else if (s.selecting_by && (now - s.selection_time < TIMEOUT)) {
+                statusClass = 'selecting';
+            }
+
+            div.className = `seat ${statusClass}`;
             div.innerText = key.replace('seat_', '');
             
-            if (s.status === 'available') {
-                div.onclick = () => {
-                    document.querySelectorAll('.seat').forEach(el => el.classList.remove('selected'));
-                    div.classList.add('selected');
-                    selectedSeatId = key;
-                };
-            }
+            // ตรรกะการคลิก
+            div.onclick = () => {
+                if (statusClass === 'available') {
+                    selectSeat(roundId, key); // เราเลือกเอง
+                } else if (statusClass === 'selecting' && s.selecting_by === currentUser.uid) {
+                    deselectSeat(roundId, key); // เรากดยกเลิกการเลือกเอง
+                } else if (statusClass === 'booked') {
+                    alert("ที่นั่งนี้ถูกจองไปแล้ว");
+                } else if (statusClass === 'selecting') {
+                    alert("มีเจ้าหน้าที่ท่านอื่นกำลังทำรายการที่นั่งนี้");
+                }
+            };
+
             map.appendChild(div);
+        }
+    });
+}
+
+// เมื่อเจ้าหน้าที่คลิกที่นั่งเพื่อเลือก
+function selectSeat(roundId, seatId) {
+    // ก่อนจะเลือกที่นั่งใหม่ ต้องเคลียร์ที่นั่งเดิมที่เราเคยเลือกค้างไว้ก่อน (ถ้ามี)
+    clearMyPreviousSelection(roundId);
+
+    db.ref(`seats/${roundId}/${seatId}`).update({
+        selecting_by: currentUser.uid,
+        selection_time: Date.now()
+    });
+    selectedSeatId = seatId;
+}
+
+// กดยกเลิกที่เลือกอยู่
+function deselectSeat(roundId, seatId) {
+    db.ref(`seats/${roundId}/${seatId}`).update({
+        selecting_by: null,
+        selection_time: null
+    });
+    selectedSeatId = null;
+}
+
+// เคลียร์ที่นั่งเก่าที่เราเคยจิ้มไว้
+function clearMyPreviousSelection(roundId) {
+    db.ref(`seats/${roundId}`).once('value', (snap) => {
+        const seats = snap.val();
+        for (let key in seats) {
+            if (seats[key].selecting_by === currentUser.uid) {
+                db.ref(`seats/${roundId}/${key}`).update({
+                    selecting_by: null,
+                    selection_time: null
+                });
+            }
         }
     });
 }
@@ -201,43 +262,40 @@ function loadSeats() {
 function confirmBooking() {
     const roundId = document.getElementById('round-select').value;
     const nationalId = document.getElementById('national-id').value;
-    const name = document.getElementById('display-name').innerText;
     
-    if(!roundId || !selectedSeatId || !nationalId) return alert("กรุณาเลือกข้อมูลให้ครบถ้วน");
+    if(!roundId || !selectedSeatId || !nationalId) return alert("กรุณาเลือกที่นั่งและใส่ข้อมูลผู้เข้าร่วม");
 
-    // ใช้ Transaction ป้องกันการจองชนกัน
     const seatRef = db.ref(`seats/${roundId}/${selectedSeatId}`);
+    
     seatRef.transaction((currentData) => {
-        if (currentData === null) return currentData;
-        if (currentData.status === 'booked') {
-            return; // ยกเลิกการทำรายการ ถ้าโดนจองไปแล้ว
-        }
+        if (!currentData) return currentData;
+        
+        // เช็คอีกครั้งในระดับ Database ว่ามีคนชิงตัดหน้าจองไปหรือยัง
+        if (currentData.status === 'booked') return; 
+
         currentData.status = 'booked';
         currentData.booked_by = nationalId;
+        currentData.selecting_by = null; // ล้างสถานะสีเหลือง
+        currentData.selection_time = null;
         return currentData;
     }, (error, committed) => {
-        if (error) {
-            alert("เกิดข้อผิดพลาด: " + error);
-        } else if (!committed) {
-            alert("ขออภัย ที่นั่งนี้ถูกจองไปแล้ว กรุณาเลือกใหม่");
-        } else {
-            // บันทึกการจองสำเร็จ
+        if (committed) {
             const bookingId = "BK-" + Date.now();
             db.ref(`bookings/${bookingId}`).set({
                 national_id: nationalId,
-                name: name,
                 round_id: roundId,
                 seat_id: selectedSeatId,
-                staff_uid: currentUser.uid
+                timestamp: Date.now()
             });
             
-            // ลดจำนวนที่นั่งว่าง
-            db.ref(`rounds/${roundId}/available_seats`).transaction(current => (current || 0) - 1);
+            // ลดจำนวนที่ว่างในรอบนั้น
+            db.ref(`rounds/${roundId}/available_seats`).transaction(c => (c || 0) - 1);
 
             alert("จองสำเร็จ!");
             generateQR(bookingId);
-            document.getElementById('user-data-form').style.display = 'none';
-            document.getElementById('national-id').value = '';
+            selectedSeatId = null; 
+        } else {
+            alert("จองไม่สำเร็จ ที่นั่งอาจถูกจองไปแล้ว");
         }
     });
 }
