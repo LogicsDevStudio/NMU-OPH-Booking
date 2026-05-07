@@ -260,43 +260,51 @@ async function fetchUserData() {
     } catch (err) { alert("เกิดข้อผิดพลาดในการดึงข้อมูล"); }
 }
 
+let seatRefreshInterval = null; // ตัวแปรสำหรับเก็บ Timer การรีเฟรช
+
 function loadSeats() {
     const roundId = document.getElementById('round-select').value;
     if(!roundId) return;
 
-    db.ref(`seats/${roundId}`).on('value', (snap) => {
-        const seats = snap.val();
-        const map = document.getElementById('seat-map');
+    // เคลียร์การนับเวลาเก่าทิ้ง เพื่อไม่ให้ทำงานซ้อนกัน
+    if(seatRefreshInterval) clearInterval(seatRefreshInterval);
+
+    const map = document.getElementById('seat-map');
+    
+    // ฟังก์ชันย่อยสำหรับวาดที่นั่ง (แยกออกมาเพื่อให้ระบบ Auto-Refresh เรียกใช้ซ้ำได้)
+    const renderSeats = (seats) => {
+        if(!map) return;
         map.innerHTML = '';
-        
+        if (!seats) return;
+
         const now = Date.now();
         const TIMEOUT = 60000; // 1 นาที (60000 ms)
 
-        for (let key in seats) {
+        // 1. คัดกรองและเรียงลำดับที่นั่งจากน้อยไปมาก
+        let seatKeys = Object.keys(seats).filter(key => key.startsWith('seat_'));
+        seatKeys.sort((a, b) => parseInt(a.replace('seat_', '')) - parseInt(b.replace('seat_', '')));
+
+        // 2. วนลูปวาดที่นั่ง
+        seatKeys.forEach(key => {
             const s = seats[key];
             const div = document.createElement('div');
             let statusClass = 'available';
 
-            // เช็คสถานะการจองตามลำดับ
             if (s.status === 'booked') {
                 statusClass = 'booked';
-            } 
-            else if (s.status === 'disabled') {
+            } else if (s.status === 'disabled') {
                 statusClass = 'disabled';
-            }
-            else if (s.selecting_by && (now - s.selection_time < TIMEOUT)) {
-                // เช็คว่าเป็นตัวเราเลือกเอง หรือ คนอื่นเลือก
+            } else if (s.selecting_by && (now - s.selection_time < TIMEOUT)) {
                 if (s.selecting_by === currentUser.uid) {
-                    statusClass = 'my-selection'; // สีฟ้า (เราเลือกเอง)
+                    statusClass = 'my-selection'; 
                 } else {
-                    statusClass = 'selecting'; // สีเหลือง (คนอื่นกำลังเลือก)
+                    statusClass = 'selecting'; 
                 }
             }
 
             div.className = `seat ${statusClass}`;
             div.innerText = key.replace('seat_', '');
             
-            // ตรรกะเมื่อคลิกที่นั่ง
             div.onclick = () => {
                 if (statusClass === 'available') {
                     selectSeat(roundId, key);
@@ -312,8 +320,23 @@ function loadSeats() {
             };
 
             map.appendChild(div);
-        }
+        });
+    };
+
+    // เปิดรับข้อมูล Realtime จาก Firebase
+    db.ref(`seats/${roundId}`).on('value', (snap) => {
+        const seats = snap.val();
+        window.currentSeatsData = seats; // เก็บข้อมูลล่าสุดไว้ในตัวแปรสำหรับอัปเดต UI อัตโนมัติ
+        renderSeats(seats);
     });
+
+    // 🌟 ระบบ Auto-Refresh: สั่งรีเฟรชหน้าจอที่นั่งทุกๆ 10 วินาที 
+    // (เฉพาะฝั่งหน้าจอเท่านั้น ไม่ได้ดึงข้อมูลฐานข้อมูลใหม่ ช่วยประหยัดโควต้า Firebase)
+    seatRefreshInterval = setInterval(() => {
+        if(window.currentSeatsData) {
+            renderSeats(window.currentSeatsData);
+        }
+    }, 10000); 
 }
 
 function selectSeat(roundId, seatId) {
@@ -628,3 +651,19 @@ async function deleteBooking(bookingId, roundId, seatId) {
         alert("เกิดข้อผิดพลาด: " + err.message);
     }
 }
+
+// ==========================================
+// 8. ระบบเช็คการเชื่อมต่อ และ Auto-Recovery
+// ==========================================
+db.ref('.info/connected').on('value', (snap) => {
+    if (snap.val() === true) {
+        console.log("🟢 กลับมาเชื่อมต่อกับระบบแล้ว");
+        // ถ้าเชื่อมต่อกลับมาสำเร็จ และผู้ใช้อยู่หน้าเลือกรอบ ให้สั่งโหลดที่นั่งอีกครั้ง
+        const currentRoundId = document.getElementById('round-select')?.value;
+        if (currentRoundId && typeof loadSeats === 'function') {
+            loadSeats();
+        }
+    } else {
+        console.warn("🔴 ขาดการเชื่อมต่ออินเทอร์เน็ต หรือฐานข้อมูล");
+    }
+});
