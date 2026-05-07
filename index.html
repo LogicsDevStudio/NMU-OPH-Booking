@@ -12,6 +12,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body class="bg-light">
@@ -51,7 +52,22 @@
                         <i class="bi bi-calendar-check me-2"></i> จองที่นั่ง
                     </a>
                 </li>
-                <li class="nav-item" id="nav-admin" style="display:none;">
+                <li class="nav-item" id="nav-checkin" style="display:none;">
+                    <a href="#" class="nav-link link-dark" onclick="showPage('checkin-page'); initScanner(); closeOffcanvas();">
+                        <i class="bi bi-qr-code-scan me-2"></i> สแกนเช็คอิน
+                    </a>
+                </li>
+                <li class="nav-item admin-menu" style="display:none;">
+                    <a href="#" class="nav-link link-dark" onclick="showPage('manage-staff-page'); loadStaffList(); closeOffcanvas();">
+                        <i class="bi bi-people me-2"></i> จัดการเจ้าหน้าที่
+                    </a>
+                </li>
+                <li class="nav-item admin-menu" style="display:none;">
+                    <a href="#" class="nav-link link-dark" onclick="showPage('manage-bookings-page'); loadAllBookings(); closeOffcanvas();">
+                        <i class="bi bi-journal-text me-2"></i> รายการจองทั้งหมด
+                    </a>
+                </li>
+                <li class="nav-item admin-menu" style="display:none;">
                     <a href="#" class="nav-link link-dark" onclick="showPage('admin-page'); closeOffcanvas();">
                         <i class="bi bi-gear me-2"></i> จัดการฐานกิจกรรม
                     </a>
@@ -215,6 +231,90 @@
                             <button class="btn btn-primary" onclick="addRound()"><i class="bi bi-plus-circle"></i> เพิ่มรอบ</button>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="checkin-page" class="page" style="display:none;">
+            <h2 class="mb-4 fw-bold"><i class="bi bi-qr-code-scan text-primary"></i> ระบบเช็คอินเข้าฐาน</h2>
+            <div class="row justify-content-center">
+                <div class="col-md-6">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-body text-center">
+                            <div id="reader" width="100%" class="mb-3"></div>
+                            <hr>
+                            <p class="text-muted">หรือกรอกรหัสการจองด้วยตนเอง (หากสแกนไม่ได้)</p>
+                            <div class="input-group mb-3">
+                                <input type="text" id="manual-booking-id" class="form-control" placeholder="เช่น BK-123456789">
+                                <button class="btn btn-primary" onclick="manualCheckIn()">ยืนยัน</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="manage-staff-page" class="page" style="display:none;">
+            <h2 class="mb-4 fw-bold"><i class="bi bi-people text-primary"></i> จัดการเจ้าหน้าที่</h2>
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-body">
+                            <h5 class="card-title fw-bold mb-3">เพิ่มเจ้าหน้าที่ใหม่</h5>
+                            <input type="email" id="staff-email" class="form-control mb-2" placeholder="อีเมล">
+                            <input type="password" id="staff-password" class="form-control mb-3" placeholder="รหัสผ่าน (ขั้นต่ำ 6 ตัว)">
+                            <select id="staff-role" class="form-select mb-3">
+                                <option value="staff">Staff (เจ้าหน้าที่ประจำฐาน)</option>
+                                <option value="admin">Admin (ผู้ดูแลระบบ)</option>
+                            </select>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">กำหนดฐานกิจกรรมที่จองได้</label>
+                                <div id="staff-stations-checkboxes" class="border p-2 rounded" style="max-height: 150px; overflow-y: auto;">
+                                    </div>
+                            </div>
+                            <button class="btn btn-success w-100" onclick="createStaff()">สร้างบัญชีผู้ใช้</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-8">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-body overflow-auto">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>อีเมล</th>
+                                        <th>บทบาท</th>
+                                        <th>สิทธิ์การเข้าถึงฐาน</th>
+                                        <th>จัดการ</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="staff-table-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="manage-bookings-page" class="page" style="display:none;">
+            <h2 class="mb-4 fw-bold"><i class="bi bi-journal-text text-primary"></i> จัดการรายการจองทั้งหมด</h2>
+            <div class="card shadow-sm border-0">
+                <div class="card-body overflow-auto">
+                    <table class="table table-hover table-bordered align-middle">
+                        <thead class="table-primary">
+                            <tr>
+                                <th>รหัสการจอง</th>
+                                <th>ผู้เข้าร่วม (เลขบัตร)</th>
+                                <th>ฐานกิจกรรม</th>
+                                <th>ที่นั่ง</th>
+                                <th>สถานะ</th>
+                                <th>จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bookings-table-body">
+                            <tr><td colspan="6" class="text-center text-muted">กำลังโหลดข้อมูล...</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
