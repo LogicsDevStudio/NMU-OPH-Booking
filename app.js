@@ -300,7 +300,112 @@ function confirmBooking() {
     });
 }
 
-function generateQR(text) {
-    document.getElementById("qrcode-container").innerHTML = `<h3>QR Code สำหรับ Check-in</h3><div id="qr" style="display:flex; justify-content:center;"></div><p>รหัสอ้างอิง: ${text}</p>`;
-    new QRCode(document.getElementById("qr"), { text: text, width: 200, height: 200 });
+// ==========================================
+// ส่วนจัดการ UI Bootstrap เพิ่มเติม
+// ==========================================
+
+// ฟังก์ชันปิด Offcanvas หลังจากคลิกเมนู
+function closeOffcanvas() {
+    const offcanvasEl = document.getElementById('sidebarMenu');
+    const offcanvasInstance = bootstrap.Offcanvas.getInstance(offcanvasEl);
+    if (offcanvasInstance) offcanvasInstance.hide();
 }
+
+// อัปเดต auth.onAuthStateChanged เพื่อสลับ Navbar UI
+auth.onAuthStateChanged((user) => {
+    if (user) {
+        currentUser = user;
+        db.ref('users/' + user.uid).once('value').then((snapshot) => {
+            const role = snapshot.val()?.role || 'staff';
+            
+            // สลับ UI บน Navbar
+            document.getElementById('nav-login-btn').classList.add('d-none'); // ซ่อนปุ่ม Login
+            document.getElementById('btn-sidebar-toggle').classList.remove('d-none'); // โชว์ปุ่ม Hamburger
+            
+            // แสดงเมนูใน Sidebar
+            document.getElementById('nav-booking').style.display = 'block';
+            document.getElementById('nav-logout').style.display = 'block';
+            if (role === 'admin') document.getElementById('nav-admin').style.display = 'block';
+            
+            loadStationsDropdown();
+            showPage('booking-page');
+            closeOffcanvas(); // ปิด Sidebar อัตโนมัติหลัง login สำเร็จ
+        });
+    } else {
+        currentUser = null;
+        // คืนค่า UI กลับเป็น Public
+        document.getElementById('nav-login-btn').classList.remove('d-none');
+        document.getElementById('btn-sidebar-toggle').classList.add('d-none');
+        
+        document.getElementById('nav-booking').style.display = 'none';
+        document.getElementById('nav-admin').style.display = 'none';
+        document.getElementById('nav-logout').style.display = 'none';
+        
+        showPage('public-page');
+    }
+});
+
+// ==========================================
+// อัปเดตหน้า Dashboard ให้เป็น Grid Card
+// ==========================================
+db.ref('rounds').on('value', async (snapshot) => {
+    const rounds = snapshot.val();
+    const dashboard = document.getElementById('dashboard-content');
+    dashboard.innerHTML = '';
+    if (!rounds) { 
+        dashboard.innerHTML = '<div class="col-12 text-center text-muted">ไม่มีข้อมูลรอบกิจกรรม</div>'; 
+        return; 
+    }
+
+    const stationsSnap = await db.ref('stations').once('value');
+    const stations = stationsSnap.val() || {};
+
+    for (let key in rounds) {
+        const r = rounds[key];
+        const stationName = stations[r.station_id]?.name || 'ไม่ทราบชื่อฐาน';
+        
+        // คำนวณ % การจองเพื่อทำ Progress bar
+        const percent = ((r.total_seats - r.available_seats) / r.total_seats) * 100;
+        let pColor = 'bg-success';
+        if(percent > 70) pColor = 'bg-warning';
+        if(percent === 100) pColor = 'bg-danger';
+
+        dashboard.innerHTML += `
+            <div class="col-md-6 col-lg-4">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body">
+                        <h5 class="card-title fw-bold text-primary mb-1">${stationName}</h5>
+                        <p class="text-muted small mb-3"><i class="bi bi-clock"></i> เวลา: ${r.time_start} - ${r.time_end}</p>
+                        
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="small fw-bold">ที่ว่าง</span>
+                            <span class="small fw-bold text-${r.available_seats > 0 ? 'success' : 'danger'}">${r.available_seats} / ${r.total_seats}</span>
+                        </div>
+                        <div class="progress" style="height: 10px;">
+                            <div class="progress-bar ${pColor}" role="progressbar" style="width: ${percent}%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+    }
+});
+
+// ==========================================
+// อัปเดตการแสดงผล QR Code ให้เปิด Bootstrap Modal
+// ==========================================
+function generateQR(text) {
+    document.getElementById("qrcode-container").innerHTML = "";
+    document.getElementById("qr-ref").innerText = text;
+    
+    new QRCode(document.getElementById("qrcode-container"), { 
+        text: text, 
+        width: 150, 
+        height: 150 
+    });
+
+    // เรียกใช้ Bootstrap Modal
+    const qrModal = new bootstrap.Modal(document.getElementById('qrModal'));
+    qrModal.show();
+}
+
+// *** หมายเหตุ: อย่าลืมนำตรรกะ loadSeats() ที่ทำสีเหลือง/เขียว/แดง/เทา มาใส่ร่วมกับ className ใหม่ด้วย (เช่น เพิ่ม class 'my-selection' เมื่อเลือกที่นั่ง) ***
