@@ -407,5 +407,3 @@ function generateQR(text) {
     const qrModal = new bootstrap.Modal(document.getElementById('qrModal'));
     qrModal.show();
 }
-
-// *** หมายเหตุ: อย่าลืมนำตรรกะ loadSeats() ที่ทำสีเหลือง/เขียว/แดง/เทา มาใส่ร่วมกับ className ใหม่ด้วย (เช่น เพิ่ม class 'my-selection' เมื่อเลือกที่นั่ง) ***
