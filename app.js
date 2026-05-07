@@ -20,6 +20,11 @@ const db = firebase.database();
 let currentUser = null;
 let selectedSeatId = null;
 
+// ใช้สำหรับสร้างบัญชี Staff โดยไม่กระทบกับ Auth ของ Admin ที่กำลังล็อกอินอยู่
+const secondaryApp = firebase.initializeApp(firebaseConfig, "Secondary");
+let currentUserData = null; // เก็บข้อมูล Role และสิทธิ์ของคนที่ล็อกอินอยู่
+let html5QrcodeScanner = null; // ตัวแปรสำหรับกล้องสแกน
+
 // ==========================================
 // 2. ระบบสลับหน้า และ จัดการ UI Bootstrap
 // ==========================================
@@ -43,16 +48,22 @@ auth.onAuthStateChanged((user) => {
     if (user) {
         currentUser = user;
         db.ref('users/' + user.uid).once('value').then((snapshot) => {
-            const role = snapshot.val()?.role || 'staff';
+            currentUserData = snapshot.val() || { role: 'staff' };
+            const role = currentUserData.role;
             
             // สลับ UI บน Navbar
             document.getElementById('nav-login-btn').classList.add('d-none');
             document.getElementById('btn-sidebar-toggle').classList.remove('d-none');
             
-            // แสดงเมนูใน Sidebar
+            // แสดงเมนู Staff
             document.getElementById('nav-booking').style.display = 'block';
+            document.getElementById('nav-checkin').style.display = 'block';
             document.getElementById('nav-logout').style.display = 'block';
-            if (role === 'admin') document.getElementById('nav-admin').style.display = 'block';
+            
+            // แสดงเมนู Admin
+            document.querySelectorAll('.admin-menu').forEach(el => {
+                el.style.display = (role === 'admin') ? 'block' : 'none';
+            });
             
             loadStationsDropdown();
             showPage('booking-page');
@@ -60,15 +71,15 @@ auth.onAuthStateChanged((user) => {
         });
     } else {
         currentUser = null;
+        currentUserData = null;
+        if(html5QrcodeScanner) html5QrcodeScanner.clear(); // ปิดกล้องถ้าล็อกเอาท์
         
-        // คืนค่า UI กลับเป็น Public
         document.getElementById('nav-login-btn').classList.remove('d-none');
         document.getElementById('btn-sidebar-toggle').classList.add('d-none');
-        
         document.getElementById('nav-booking').style.display = 'none';
-        document.getElementById('nav-admin').style.display = 'none';
+        document.getElementById('nav-checkin').style.display = 'none';
+        document.querySelectorAll('.admin-menu').forEach(el => el.style.display = 'none');
         document.getElementById('nav-logout').style.display = 'none';
-        
         showPage('public-page');
     }
 });
@@ -169,10 +180,25 @@ function addRound() {
 function loadStationsDropdown() {
     db.ref('stations').once('value', (snap) => {
         const stations = snap.val();
-        let html = '<option value="">-- เลือกฐานกิจกรรม --</option>';
-        for (let key in stations) html += `<option value="${key}">${stations[key].name}</option>`;
-        document.getElementById('admin-station-select').innerHTML = html;
-        document.getElementById('station-select').innerHTML = html;
+        let bookingHtml = '<option value="">-- เลือกฐานกิจกรรม --</option>';
+        let adminHtml = bookingHtml;
+        let checkboxesHtml = '';
+
+        for (let key in stations) {
+            const stName = stations[key].name;
+            adminHtml += `<option value="${key}">${stName}</option>`;
+            checkboxesHtml += `<div class="form-check"><input class="form-check-input station-cb" type="checkbox" value="${key}" id="cb-${key}"><label class="form-check-label" for="cb-${key}">${stName}</label></div>`;
+            
+            // เช็คสิทธิ์การมองเห็นสำหรับหน้าจองที่นั่ง
+            if (currentUserData.role === 'admin' || (currentUserData.allowed_stations && currentUserData.allowed_stations[key])) {
+                bookingHtml += `<option value="${key}">${stName}</option>`;
+            }
+        }
+        
+        // อัปเดต Dropdown ตามหน้าต่างๆ
+        if(document.getElementById('admin-station-select')) document.getElementById('admin-station-select').innerHTML = adminHtml;
+        if(document.getElementById('station-select')) document.getElementById('station-select').innerHTML = bookingHtml;
+        if(document.getElementById('staff-stations-checkboxes')) document.getElementById('staff-stations-checkboxes').innerHTML = checkboxesHtml;
     });
 }
 
@@ -361,4 +387,203 @@ function generateQR(text) {
 
     const qrModal = new bootstrap.Modal(document.getElementById('qrModal'));
     qrModal.show();
+}
+
+// ==========================================
+// ระบบ Check-in สแกน QR Code
+// ==========================================
+function initScanner() {
+    if(html5QrcodeScanner) html5QrcodeScanner.clear();
+    html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: {width: 250, height: 250} }, false);
+    html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+}
+
+function onScanSuccess(decodedText, decodedResult) {
+    html5QrcodeScanner.pause(true); // หยุดสแกนชั่วคราวกันสแกนซ้ำรัวๆ
+    processCheckIn(decodedText);
+}
+function onScanFailure(error) { /* ไม่ต้องทำอะไร รอจนกว่าจะสแกนติด */ }
+
+function manualCheckIn() {
+    const id = document.getElementById('manual-booking-id').value.trim();
+    if(id) processCheckIn(id);
+}
+
+async function processCheckIn(bookingId) {
+    try {
+        const ref = db.ref(`bookings/${bookingId}`);
+        const snap = await ref.once('value');
+        
+        if (!snap.exists()) {
+            alert("❌ ไม่พบข้อมูลการจองนี้ในระบบ");
+            if(html5QrcodeScanner) html5QrcodeScanner.resume();
+            return;
+        }
+
+        const data = snap.val();
+        if (data.status === 'checked-in') {
+            alert(`⚠️ ตั๋วนี้ถูกสแกนเช็คอินไปแล้ว!\nเวลา: ${new Date(data.checkin_time).toLocaleString()}`);
+        } else {
+            // อัปเดตสถานะเป็น check-in
+            await ref.update({ 
+                status: 'checked-in', 
+                checkin_time: Date.now(),
+                checkin_by: currentUser.uid 
+            });
+            alert("✅ เช็คอินสำเร็จ!");
+        }
+    } catch (err) {
+        alert("เกิดข้อผิดพลาด: " + err.message);
+    }
+    
+    document.getElementById('manual-booking-id').value = '';
+    if(html5QrcodeScanner) html5QrcodeScanner.resume();
+}
+
+// ==========================================
+// ระบบจัดการ Staff (Admin Only)
+// ==========================================
+async function createStaff() {
+    const email = document.getElementById('staff-email').value;
+    const password = document.getElementById('staff-password').value;
+    const role = document.getElementById('staff-role').value;
+    
+    if(!email || password.length < 6) return alert("กรุณากรอกอีเมลและรหัสผ่านขั้นต่ำ 6 ตัว");
+
+    // ดึงค่า checkbox ว่าให้คุมฐานไหนบ้าง
+    let allowed_stations = {};
+    document.querySelectorAll('.station-cb:checked').forEach(cb => {
+        allowed_stations[cb.value] = true;
+    });
+
+    try {
+        // ใช้ Secondary App สร้าง Auth โดยไม่ให้ Admin ปัจจุบันหลุด
+        const userCred = await secondaryApp.auth().createUserWithEmailAndPassword(email, password);
+        const newUid = userCred.user.uid;
+
+        // บันทึกข้อมูลลง Database
+        await db.ref(`users/${newUid}`).set({
+            email: email,
+            role: role,
+            allowed_stations: allowed_stations
+        });
+
+        // Sign out app รองทิ้งไป
+        await secondaryApp.auth().signOut();
+
+        alert("เพิ่มเจ้าหน้าที่สำเร็จ!");
+        document.getElementById('staff-email').value = '';
+        document.getElementById('staff-password').value = '';
+        loadStaffList();
+
+    } catch (error) {
+        alert("สร้างบัญชีไม่สำเร็จ: " + error.message);
+    }
+}
+
+function loadStaffList() {
+    db.ref('users').on('value', async (snap) => {
+        const users = snap.val();
+        const tbody = document.getElementById('staff-table-body');
+        tbody.innerHTML = '';
+        
+        const stationsSnap = await db.ref('stations').once('value');
+        const stations = stationsSnap.val() || {};
+
+        for (let uid in users) {
+            const u = users[uid];
+            let stationBadges = '';
+            if (u.role === 'admin') {
+                stationBadges = '<span class="badge bg-primary">All (Admin)</span>';
+            } else if (u.allowed_stations) {
+                for(let stId in u.allowed_stations) {
+                    stationBadges += `<span class="badge bg-secondary me-1">${stations[stId]?.name || 'Unknown'}</span>`;
+                }
+            } else {
+                stationBadges = '<span class="text-muted small">ไม่มีสิทธิ์</span>';
+            }
+
+            tbody.innerHTML += `
+                <tr>
+                    <td>${u.email || 'N/A'}</td>
+                    <td><span class="badge ${u.role === 'admin' ? 'bg-danger' : 'bg-success'}">${u.role.toUpperCase()}</span></td>
+                    <td>${stationBadges}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteStaff('${uid}')"><i class="bi bi-trash"></i></button>
+                    </td>
+                </tr>
+            `;
+        }
+    });
+}
+
+function deleteStaff(uid) {
+    if(confirm("ยืนยันการลบข้อมูลเจ้าหน้าที่นี้? (ผู้ใช้จะยังล็อกอินได้หากไม่ลบใน Authentication Console แต่จะไม่มีสิทธิ์ในระบบ)")) {
+        db.ref(`users/${uid}`).remove().then(() => alert('ลบสำเร็จ'));
+    }
+}
+
+// ==========================================
+// ระบบจัดการรายการจอง (Admin Only)
+// ==========================================
+async function loadAllBookings() {
+    const [bookingsSnap, roundsSnap, stationsSnap] = await Promise.all([
+        db.ref('bookings').once('value'),
+        db.ref('rounds').once('value'),
+        db.ref('stations').once('value')
+    ]);
+
+    const bookings = bookingsSnap.val() || {};
+    const rounds = roundsSnap.val() || {};
+    const stations = stationsSnap.val() || {};
+    const tbody = document.getElementById('bookings-table-body');
+    tbody.innerHTML = '';
+
+    if(Object.keys(bookings).length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">ไม่มีรายการจอง</td></tr>';
+        return;
+    }
+
+    for (let bId in bookings) {
+        const b = bookings[bId];
+        const round = rounds[b.round_id] || {};
+        const stName = stations[round.station_id]?.name || 'ไม่ทราบฐาน';
+        const seatName = b.seat_id.replace('seat_', '');
+        const isCheckedIn = (b.status === 'checked-in');
+
+        tbody.innerHTML += `
+            <tr>
+                <td class="small font-monospace">${bId}</td>
+                <td>${b.national_id}</td>
+                <td>${stName} <br><small class="text-muted">${round.time_start}-${round.time_end}</small></td>
+                <td><span class="badge bg-dark">${seatName}</span></td>
+                <td>
+                    <span class="badge ${isCheckedIn ? 'bg-success' : 'bg-warning text-dark'}">
+                        ${isCheckedIn ? 'เช็คอินแล้ว' : 'จองแล้ว'}
+                    </span>
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-danger" onclick="deleteBooking('${bId}', '${b.round_id}', '${b.seat_id}')">ลบ</button>
+                </td>
+            </tr>
+        `;
+    }
+}
+
+async function deleteBooking(bookingId, roundId, seatId) {
+    if(!confirm("ยืนยันการลบรายการนี้? ที่นั่งจะถูกคืนกลับสู่ระบบ")) return;
+
+    try {
+        // 1. ลบการจอง
+        await db.ref(`bookings/${bookingId}`).remove();
+        // 2. เคลียร์ที่นั่ง
+        await db.ref(`seats/${roundId}/${seatId}`).update({ status: 'available', booked_by: null });
+        // 3. คืนค่าที่นั่งว่าง +1
+        await db.ref(`rounds/${roundId}/available_seats`).transaction(c => (c || 0) + 1);
+        
+        alert("ลบและคืนที่นั่งสำเร็จ");
+        loadAllBookings(); // โหลดตารางใหม่
+    } catch (err) {
+        alert("เกิดข้อผิดพลาด: " + err.message);
+    }
 }
