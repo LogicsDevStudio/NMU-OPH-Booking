@@ -556,46 +556,58 @@ function deleteStaff(uid) {
 // ระบบจัดการรายการจอง (Admin Only)
 // ==========================================
 async function loadAllBookings() {
-    const [bookingsSnap, roundsSnap, stationsSnap] = await Promise.all([
-        db.ref('bookings').once('value'),
-        db.ref('rounds').once('value'),
-        db.ref('stations').once('value')
-    ]);
+    try {
+        const [bookingsSnap, roundsSnap, stationsSnap] = await Promise.all([
+            db.ref('bookings').once('value'),
+            db.ref('rounds').once('value'),
+            db.ref('stations').once('value')
+        ]);
 
-    const bookings = bookingsSnap.val() || {};
-    const rounds = roundsSnap.val() || {};
-    const stations = stationsSnap.val() || {};
-    const tbody = document.getElementById('bookings-table-body');
-    tbody.innerHTML = '';
+        const bookings = bookingsSnap.val() || {};
+        const rounds = roundsSnap.val() || {};
+        const stations = stationsSnap.val() || {};
+        const tbody = document.getElementById('bookings-table-body');
+        tbody.innerHTML = '';
 
-    if(Object.keys(bookings).length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">ไม่มีรายการจอง</td></tr>';
-        return;
-    }
+        if(Object.keys(bookings).length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">ไม่มีรายการจอง</td></tr>';
+            return;
+        }
 
-    for (let bId in bookings) {
-        const b = bookings[bId];
-        const round = rounds[b.round_id] || {};
-        const stName = stations[round.station_id]?.name || 'ไม่ทราบฐาน';
-        const seatName = b.seat_id.replace('seat_', '');
-        const isCheckedIn = (b.status === 'checked-in');
+        for (let bId in bookings) {
+            const b = bookings[bId];
+            
+            // ป้องกัน Error กรณีข้อมูลไม่ครบ (ดัก Undefined)
+            const roundId = b.round_id || 'ไม่ระบุ';
+            const round = rounds[roundId] || {};
+            const stName = stations[round.station_id]?.name || 'ไม่ทราบฐาน';
+            
+            // 🌟 แก้ปัญหา Error .replace() ตรงนี้: ตรวจสอบก่อนว่ามี seat_id หรือไม่
+            const seatName = b.seat_id ? String(b.seat_id).replace('seat_', '') : '<span class="text-danger">ไม่ระบุที่นั่ง</span>';
+            const nationalId = b.national_id || 'ไม่มีข้อมูล';
+            
+            const isCheckedIn = (b.status === 'checked-in');
 
-        tbody.innerHTML += `
-            <tr>
-                <td class="small font-monospace">${bId}</td>
-                <td>${b.national_id}</td>
-                <td>${stName} <br><small class="text-muted">${round.time_start}-${round.time_end}</small></td>
-                <td><span class="badge bg-dark">${seatName}</span></td>
-                <td>
-                    <span class="badge ${isCheckedIn ? 'bg-success' : 'bg-warning text-dark'}">
-                        ${isCheckedIn ? 'เช็คอินแล้ว' : 'จองแล้ว'}
-                    </span>
-                </td>
-                <td>
-                    <button class="btn btn-sm btn-danger" onclick="deleteBooking('${bId}', '${b.round_id}', '${b.seat_id}')">ลบ</button>
-                </td>
-            </tr>
-        `;
+            tbody.innerHTML += `
+                <tr>
+                    <td class="small font-monospace">${bId}</td>
+                    <td>${nationalId}</td>
+                    <td>${stName} <br><small class="text-muted">${round.time_start || '--:--'}-${round.time_end || '--:--'}</small></td>
+                    <td><span class="badge bg-dark">${seatName}</span></td>
+                    <td>
+                        <span class="badge ${isCheckedIn ? 'bg-success' : 'bg-warning text-dark'}">
+                            ${isCheckedIn ? 'เช็คอินแล้ว' : 'จองแล้ว'}
+                        </span>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" onclick="deleteBooking('${bId}', '${roundId}', '${b.seat_id || ''}')">ลบ</button>
+                    </td>
+                </tr>
+            `;
+        }
+    } catch (err) {
+        console.error("Error loading bookings:", err);
+        document.getElementById('bookings-table-body').innerHTML = `<tr><td colspan="6" class="text-center text-danger">เกิดข้อผิดพลาด: ${err.message}</td></tr>`;
     }
 }
 
