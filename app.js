@@ -44,23 +44,38 @@ function closeOffcanvas() {
 // ==========================================
 // 3. ระบบ Authentication
 // ==========================================
-auth.onAuthStateChanged((user) => {
+// กำหนดอีเมลที่จะเป็น Super Admin อัตโนมัติ (แก้เป็นอีเมลของคุณ)
+const SUPER_ADMIN_EMAIL = "admin1@test.com"; 
+
+auth.onAuthStateChanged(async (user) => {
     if (user) {
         currentUser = user;
-        db.ref('users/' + user.uid).once('value').then((snapshot) => {
-            currentUserData = snapshot.val() || { role: 'staff' };
+        
+        try {
+            // ดึงข้อมูลผู้ใช้จาก Database
+            let snapshot = await db.ref('users/' + user.uid).once('value');
+            let userData = snapshot.val();
+
+            // 🌟 ระบบทำงานอัตโนมัติ: ถ้าล็อกอินครั้งแรกและตรงกับอีเมล Super Admin ให้สร้างโปรไฟล์ลง DB เลย
+            if (!userData && user.email === SUPER_ADMIN_EMAIL) {
+                userData = { email: user.email, role: 'admin' };
+                await db.ref('users/' + user.uid).set(userData);
+            }
+
+            // ถ้าไม่มีข้อมูลในระบบเลย ให้ถือว่าเป็น staff ธรรมดา
+            currentUserData = userData || { role: 'staff' };
             const role = currentUserData.role;
             
             // สลับ UI บน Navbar
             document.getElementById('nav-login-btn').classList.add('d-none');
             document.getElementById('btn-sidebar-toggle').classList.remove('d-none');
             
-            // แสดงเมนู Staff
+            // แสดงเมนูพื้นฐานสำหรับ Staff ทุกคน
             document.getElementById('nav-booking').style.display = 'block';
             document.getElementById('nav-checkin').style.display = 'block';
             document.getElementById('nav-logout').style.display = 'block';
             
-            // แสดงเมนู Admin
+            // 🌟 กำหนดการแสดงผลเมนูอัตโนมัติ: โชว์เมนู Admin เฉพาะแอดมินเท่านั้น
             document.querySelectorAll('.admin-menu').forEach(el => {
                 el.style.display = (role === 'admin') ? 'block' : 'none';
             });
@@ -68,18 +83,24 @@ auth.onAuthStateChanged((user) => {
             loadStationsDropdown();
             showPage('booking-page');
             closeOffcanvas();
-        });
+
+        } catch (err) {
+            console.error("Error loading user profile:", err);
+            alert("เกิดข้อผิดพลาดในการโหลดข้อมูลสิทธิ์การใช้งาน");
+        }
     } else {
         currentUser = null;
         currentUserData = null;
         if(html5QrcodeScanner) html5QrcodeScanner.clear(); // ปิดกล้องถ้าล็อกเอาท์
         
+        // ซ่อนเมนูทุกอย่าง กลับสู่หน้า Public
         document.getElementById('nav-login-btn').classList.remove('d-none');
         document.getElementById('btn-sidebar-toggle').classList.add('d-none');
         document.getElementById('nav-booking').style.display = 'none';
         document.getElementById('nav-checkin').style.display = 'none';
         document.querySelectorAll('.admin-menu').forEach(el => el.style.display = 'none');
         document.getElementById('nav-logout').style.display = 'none';
+        
         showPage('public-page');
     }
 });
