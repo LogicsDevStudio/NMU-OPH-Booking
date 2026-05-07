@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบจองที่นั่งกิจกรรม</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+
+    <nav>
+        <button onclick="showPage('public-page')">สถานะที่นั่ง (Public)</button>
+        <button id="nav-login" onclick="showPage('login-page')">เข้าสู่ระบบ</button>
+        <button id="nav-booking" style="display:none;" onclick="showPage('booking-page')">จองที่นั่ง (Staff)</button>
+        <button id="nav-admin" style="display:none;" onclick="showPage('admin-page')">จัดการระบบ (Admin)</button>
+        <button id="nav-logout" style="display:none;" onclick="logout()">ออกจากระบบ</button>
+    </nav>
+
+    <div class="container">
+        <div id="public-page" class="page active">
+            <h2>อัปเดตจำนวนที่ว่างแบบ Realtime</h2>
+            <div id="dashboard-content">กำลังโหลดข้อมูล...</div>
+        </div>
+
+        <div id="login-page" class="page" style="display:none;">
+            <h2>เข้าสู่ระบบ</h2>
+            <input type="email" id="email" placeholder="อีเมล">
+            <input type="password" id="password" placeholder="รหัสผ่าน">
+            <button onclick="login()">Login</button>
+        </div>
+
+        <div id="booking-page" class="page" style="display:none;">
+            <h2>ระบบจองที่นั่ง</h2>
+            <div class="form-group">
+                <select id="station-select" onchange="loadRoundsForBooking()">
+                    <option value="">-- เลือกฐานกิจกรรม --</option>
+                </select>
+                <select id="round-select" onchange="loadSeats()">
+                    <option value="">-- เลือกรอบ --</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <input type="text" id="national-id" placeholder="เลขบัตรประชาชน 13 หลัก">
+                <button onclick="fetchUserData()">ดึงข้อมูลผู้เข้าร่วม</button>
+            </div>
+
+            <div id="user-data-form" style="display:none;" class="form-group card">
+                <p><strong>ชื่อ:</strong> <span id="display-name"></span></p>
+                <p><strong>เบอร์โทร:</strong> <span id="display-phone"></span></p>
+                <hr>
+                <h4>เลือกที่นั่ง:</h4>
+                <div id="seat-map" class="seat-map"></div>
+                <button onclick="confirmBooking()" style="margin-top: 10px; width: 100%; background: #28a745;">ยืนยันการจอง</button>
+            </div>
+
+            <div id="qrcode-container" style="margin-top: 20px; text-align: center;"></div>
+        </div>
+
+        <div id="admin-page" class="page" style="display:none;">
+            <h2>จัดการฐานกิจกรรม (Admin)</h2>
+            <div class="card form-group">
+                <h3>1. เพิ่มฐานกิจกรรม</h3>
+                <input type="text" id="new-station-name" placeholder="ชื่อฐานกิจกรรม">
+                <button onclick="addStation()">เพิ่มฐาน</button>
+            </div>
+
+            <div class="card form-group">
+                <h3>2. เพิ่มรอบกิจกรรม</h3>
+                <select id="admin-station-select"></select>
+                <input type="time" id="time-start">
+                <input type="time" id="time-end">
+                <input type="number" id="total-seats" placeholder="จำนวนที่นั่งทั้งหมด">
+                <button onclick="addRound()">เพิ่มรอบ</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
