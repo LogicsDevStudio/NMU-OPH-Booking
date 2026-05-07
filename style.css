@@ -12,5 +12,23 @@ button:hover { background: #0056b3; }
 .seat-map { display: flex; flex-wrap: wrap; gap: 10px; }
 .seat { padding: 10px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; background: white; width: calc(20% - 10px); text-align: center; }
 .seat.selected { background: #007BFF; color: white; border-color: #007BFF; }
-.seat.booked { background: #dc3545; color: white; cursor: not-allowed; border-color: #dc3545; }
+
+/* สีเขียว: ว่าง */
+.seat.available { background: #28a745; color: white; border-color: #1e7e34; }
+
+/* สีแดง: จองแล้ว */
+.seat.booked { background: #dc3545; color: white; cursor: not-allowed; border-color: #bd2130; }
+
+/* สีเหลือง: กำลังถูกเลือก (โดยเราหรือคนอื่น) */
+.seat.selecting { background: #ffc107; color: #212529; border-color: #e0a800; animation: blink 1s infinite; }
+
+/* สีเทา: ปิดใช้งาน */
+.seat.disabled { background: #6c757d; color: white; cursor: not-allowed; border-color: #545b62; }
+
+@keyframes blink {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+}
+
 .dashboard-item { padding: 10px; border-bottom: 1px solid #eee; }
