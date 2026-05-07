@@ -1,0 +1,16 @@
+body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f7f6; margin: 0; }
+nav { background: #333; padding: 10px; text-align: center; }
+nav button { background: #4CAF50; color: white; border: none; padding: 10px 15px; margin: 0 5px; cursor: pointer; border-radius: 4px; }
+nav button:hover { background: #45a049; }
+.container { max-width: 800px; margin: 20px auto; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+.page { display: none; }
+.page.active { display: block; }
+input, select { width: 100%; padding: 10px; margin: 5px 0 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+button { width: 100%; padding: 10px; background: #007BFF; color: white; border: none; border-radius: 4px; cursor: pointer; }
+button:hover { background: #0056b3; }
+.card { border: 1px solid #eee; padding: 15px; margin-bottom: 15px; border-radius: 4px; background: #fafafa; }
+.seat-map { display: flex; flex-wrap: wrap; gap: 10px; }
+.seat { padding: 10px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; background: white; width: calc(20% - 10px); text-align: center; }
+.seat.selected { background: #007BFF; color: white; border-color: #007BFF; }
+.seat.booked { background: #dc3545; color: white; cursor: not-allowed; border-color: #dc3545; }
+.dashboard-item { padding: 10px; border-bottom: 1px solid #eee; }
