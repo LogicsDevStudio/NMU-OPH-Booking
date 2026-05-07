@@ -457,26 +457,34 @@ async function createStaff() {
     });
 
     try {
-        // ใช้ Secondary App สร้าง Auth โดยไม่ให้ Admin ปัจจุบันหลุด
+        // 1. ป้องกันไม่ให้ Secondary App จำการล็อกอิน (ไม่ให้ไปเตะ Admin ปัจจุบันหลุด)
+        await secondaryApp.auth().setPersistence(firebase.auth.Auth.Persistence.NONE);
+        
+        // 2. ใช้ Secondary App สร้าง Auth
         const userCred = await secondaryApp.auth().createUserWithEmailAndPassword(email, password);
         const newUid = userCred.user.uid;
 
-        // บันทึกข้อมูลลง Database
-        await db.ref(`users/${newUid}`).set({
+        // 3. เตรียมข้อมูลที่จะบันทึก (ถ้าไม่มีการติ๊กเลือกฐาน จะไม่ส่ง Object ว่างๆ ป้องกัน Error)
+        const userData = {
             email: email,
-            role: role,
-            allowed_stations: allowed_stations
-        });
+            role: role
+        };
+        if (Object.keys(allowed_stations).length > 0) {
+            userData.allowed_stations = allowed_stations;
+        }
 
-        // Sign out app รองทิ้งไป
-        await secondaryApp.auth().signOut();
+        // 4. บันทึกข้อมูลลง Database โดยใช้ db (Primary App ของ Admin)
+        await db.ref(`users/${newUid}`).set(userData);
 
         alert("เพิ่มเจ้าหน้าที่สำเร็จ!");
         document.getElementById('staff-email').value = '';
         document.getElementById('staff-password').value = '';
+        
+        // โหลดรายการในตารางใหม่
         loadStaffList();
 
     } catch (error) {
+        console.error("Error creating staff:", error);
         alert("สร้างบัญชีไม่สำเร็จ: " + error.message);
     }
 }
