@@ -1,34 +1,69 @@
-body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f7f6; margin: 0; }
-nav { background: #333; padding: 10px; text-align: center; }
-nav button { background: #4CAF50; color: white; border: none; padding: 10px 15px; margin: 0 5px; cursor: pointer; border-radius: 4px; }
-nav button:hover { background: #45a049; }
-.container { max-width: 800px; margin: 20px auto; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+/* การสลับหน้า SPA */
 .page { display: none; }
-.page.active { display: block; }
-input, select { width: 100%; padding: 10px; margin: 5px 0 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-button { width: 100%; padding: 10px; background: #007BFF; color: white; border: none; border-radius: 4px; cursor: pointer; }
-button:hover { background: #0056b3; }
-.card { border: 1px solid #eee; padding: 15px; margin-bottom: 15px; border-radius: 4px; background: #fafafa; }
-.seat-map { display: flex; flex-wrap: wrap; gap: 10px; }
-.seat { padding: 10px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; background: white; width: calc(20% - 10px); text-align: center; }
-.seat.selected { background: #007BFF; color: white; border-color: #007BFF; }
+.page.active { display: block; animation: fadeIn 0.3s ease-in-out; }
 
-/* สีเขียว: ว่าง */
-.seat.available { background: #28a745; color: white; border-color: #1e7e34; }
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
 
-/* สีแดง: จองแล้ว */
-.seat.booked { background: #dc3545; color: white; cursor: not-allowed; border-color: #bd2130; }
+/* CSS Grid สำหรับที่นั่ง (Responsive) */
+.seat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+    gap: 10px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+    min-height: 200px;
+    align-content: start;
+}
 
-/* สีเหลือง: กำลังถูกเลือก (โดยเราหรือคนอื่น) */
-.seat.selecting { background: #ffc107; color: #212529; border-color: #e0a800; animation: blink 1s infinite; }
+/* สไตล์ที่นั่งพื้นฐาน */
+.seat {
+    aspect-ratio: 1 / 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    border: 2px solid transparent;
+    user-select: none;
+}
+.seat:active { transform: scale(0.95); }
 
-/* สีเทา: ปิดใช้งาน */
-.seat.disabled { background: #6c757d; color: white; cursor: not-allowed; border-color: #545b62; }
+/* สถานะที่นั่ง (อิงตาม Bootstrap Colors) */
+.seat.available { 
+    background-color: #d1e7dd; color: #0f5132; border-color: #badbcc; 
+}
+.seat.available:hover { background-color: #198754; color: white; }
+
+.seat.booked { 
+    background-color: #dc3545; color: white; cursor: not-allowed; border-color: #bd2130; 
+}
+
+.seat.selecting { 
+    background-color: #ffc107; color: #000; border-color: #e0a800; cursor: not-allowed;
+    animation: blink 1.5s infinite alternate; 
+}
+
+.seat.disabled { 
+    background-color: #e9ecef; color: #6c757d; cursor: not-allowed; border-color: #ced4da; 
+}
+
+/* เอฟเฟกต์เมื่อเราเลือกที่นั่ง */
+.seat.my-selection {
+    background-color: #0d6efd; color: white; border-color: #0a58ca;
+    transform: scale(1.05);
+    box-shadow: 0 0 10px rgba(13, 110, 253, 0.5);
+    animation: none; /* ปิด blink เพราะเราเลือกเอง */
+}
 
 @keyframes blink {
     0% { opacity: 1; }
-    50% { opacity: 0.7; }
-    100% { opacity: 1; }
+    100% { opacity: 0.6; }
 }
-
-.dashboard-item { padding: 10px; border-bottom: 1px solid #eee; }
