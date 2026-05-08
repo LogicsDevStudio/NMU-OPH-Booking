@@ -68,7 +68,7 @@
                     </a>
                 </li>
                 <li class="nav-item admin-menu" style="display:none;">
-                    <a href="#" class="nav-link link-dark" onclick="showPage('admin-page'); closeOffcanvas();">
+                    <a href="#" class="nav-link link-dark" onclick="showPage('admin-page'); loadAdminStationsTable(); closeOffcanvas();">
                         <i class="bi bi-gear me-2"></i> จัดการฐานกิจกรรม
                     </a>
                 </li>
@@ -177,13 +177,12 @@
                 <div class="modal-dialog modal-dialog-centered">
                     <div class="modal-content border-0 shadow">
                         <div class="modal-header bg-success text-white border-0">
-                            <h5 class="modal-title fw-bold"><i class="bi bi-check-circle-fill me-2"></i>จองสำเร็จ</h5>
+                            <h5 class="modal-title fw-bold"><i class="bi bi-check-circle-fill me-2"></i>QR Code การจอง</h5>
                             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
                         <div class="modal-body text-center py-4">
                             <div id="qrcode-container" class="d-flex justify-content-center mb-3"></div>
                             <p class="mb-0 text-muted">รหัสอ้างอิง: <strong id="qr-ref" class="text-dark"></strong></p>
-                            <p class="text-muted small mt-2">กรุณาบันทึกภาพหน้าจอนี้ไว้สำหรับ Check-in</p>
                         </div>
                     </div>
                 </div>
@@ -191,45 +190,69 @@
         </div>
 
         <div id="admin-page" class="page" style="display:none;">
-            <h2 class="mb-4 fw-bold"><i class="bi bi-gear text-primary"></i> จัดการฐานกิจกรรม (Admin)</h2>
-            <div class="row g-4">
-                <div class="col-md-6">
-                    <div class="card shadow-sm border-0">
-                        <div class="card-body">
-                            <h5 class="card-title fw-bold mb-3">เพิ่มฐานกิจกรรม</h5>
-                            <div class="mb-3">
-                                <label class="form-label">ชื่อฐานกิจกรรม</label>
-                                <input type="text" class="form-control" id="new-station-name" placeholder="เช่น ฐานที่ 1: วิทยาศาสตร์">
-                            </div>
-                            <button class="btn btn-primary" onclick="addStation()"><i class="bi bi-plus-circle"></i> เพิ่มฐาน</button>
-                        </div>
+            <h2 class="mb-4 fw-bold"><i class="bi bi-diagram-3 text-primary"></i> จัดการฐานกิจกรรมและรอบเวลา</h2>
+            
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-body">
+                    <div class="d-flex gap-2 mb-3">
+                        <input type="text" id="new-station-name" class="form-control w-auto" placeholder="ชื่อฐานกิจกรรมใหม่">
+                        <button class="btn btn-primary" onclick="addStation()">
+                            <i class="bi bi-plus-circle"></i> เพิ่มฐานกิจกรรม
+                        </button>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle border mb-0">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>ชื่อฐานกิจกรรม</th>
+                                    <th class="text-end">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-station-tbody">
+                                <tr><td colspan="2" class="text-center text-muted">กำลังโหลดข้อมูล...</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
+            </div>
 
-                <div class="col-md-6">
-                    <div class="card shadow-sm border-0">
-                        <div class="card-body">
-                            <h5 class="card-title fw-bold mb-3">เพิ่มรอบกิจกรรม</h5>
-                            <div class="mb-3">
-                                <label class="form-label">เลือกฐาน</label>
-                                <select class="form-select" id="admin-station-select"></select>
-                            </div>
-                            <div class="row g-2 mb-3">
-                                <div class="col-6">
-                                    <label class="form-label">เวลาเริ่ม</label>
-                                    <input type="time" class="form-control" id="time-start">
-                                </div>
-                                <div class="col-6">
-                                    <label class="form-label">เวลาจบ</label>
-                                    <input type="time" class="form-control" id="time-end">
-                                </div>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">จำนวนที่นั่งทั้งหมด</label>
-                                <input type="number" class="form-control" id="total-seats" placeholder="เช่น 30">
-                            </div>
-                            <button class="btn btn-primary" onclick="addRound()"><i class="bi bi-plus-circle"></i> เพิ่มรอบ</button>
+            <div id="admin-rounds-section" class="card shadow-sm border-0 border-top border-primary border-4" style="display:none;">
+                <div class="card-body">
+                    <h4 id="round-station-title" class="text-primary mb-3 fw-bold">📅 รอบกิจกรรมของ...</h4>
+                    
+                    <div class="row g-2 mb-4 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label small text-muted mb-1">เวลาเริ่ม</label>
+                            <input type="time" id="new-time-start" class="form-control">
                         </div>
+                        <div class="col-md-3">
+                            <label class="form-label small text-muted mb-1">เวลาสิ้นสุด</label>
+                            <input type="time" id="new-time-end" class="form-control">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small text-muted mb-1">จำนวนที่นั่ง</label>
+                            <input type="number" id="new-total-seats" class="form-control" placeholder="เช่น 30">
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-success w-100" onclick="addRoundNew()">
+                                <i class="bi bi-plus-circle"></i> เพิ่มรอบเวลา
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle border">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>เวลา</th>
+                                    <th>ที่นั่งทั้งหมด</th>
+                                    <th>ที่ว่าง</th>
+                                    <th class="text-end">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-round-tbody"></tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -308,7 +331,7 @@
                                 <th>ฐานกิจกรรม</th>
                                 <th>ที่นั่ง</th>
                                 <th>สถานะ</th>
-                                <th>จัดการ</th>
+                                <th class="text-end">จัดการ</th>
                             </tr>
                         </thead>
                         <tbody id="bookings-table-body">
