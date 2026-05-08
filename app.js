@@ -25,10 +25,6 @@ const secondaryApp = firebase.initializeApp(firebaseConfig, "Secondary");
 let currentUserData = null; // เก็บข้อมูล Role และสิทธิ์ของคนที่ล็อกอินอยู่
 let html5QrcodeScanner = null; // ตัวแปรสำหรับกล้องสแกน
 
-// ตัวแปรสำหรับจัดการรีเฟรชที่นั่ง
-let currentRoundListenerId = null; 
-let seatRefreshInterval = null; 
-
 // ==========================================
 // 2. ระบบสลับหน้า และ จัดการ UI Bootstrap
 // ==========================================
@@ -48,7 +44,7 @@ function closeOffcanvas() {
 // ==========================================
 // 3. ระบบ Authentication
 // ==========================================
-// กำหนดอีเมลที่จะเป็น Super Admin อัตโนมัติ
+// กำหนดอีเมลที่จะเป็น Super Admin อัตโนมัติ (แก้เป็นอีเมลของคุณ)
 const SUPER_ADMIN_EMAIL = "admin1@test.com"; 
 
 auth.onAuthStateChanged(async (user) => {
@@ -60,7 +56,7 @@ auth.onAuthStateChanged(async (user) => {
             let snapshot = await db.ref('users/' + user.uid).once('value');
             let userData = snapshot.val();
 
-            // ระบบทำงานอัตโนมัติ: ถ้าล็อกอินครั้งแรกและตรงกับอีเมล Super Admin ให้สร้างโปรไฟล์ลง DB เลย
+            // 🌟 ระบบทำงานอัตโนมัติ: ถ้าล็อกอินครั้งแรกและตรงกับอีเมล Super Admin ให้สร้างโปรไฟล์ลง DB เลย
             if (!userData && user.email === SUPER_ADMIN_EMAIL) {
                 userData = { email: user.email, role: 'admin' };
                 await db.ref('users/' + user.uid).set(userData);
@@ -79,7 +75,7 @@ auth.onAuthStateChanged(async (user) => {
             document.getElementById('nav-checkin').style.display = 'block';
             document.getElementById('nav-logout').style.display = 'block';
             
-            // กำหนดการแสดงผลเมนูอัตโนมัติ: โชว์เมนู Admin เฉพาะแอดมินเท่านั้น
+            // 🌟 กำหนดการแสดงผลเมนูอัตโนมัติ: โชว์เมนู Admin เฉพาะแอดมินเท่านั้น
             document.querySelectorAll('.admin-menu').forEach(el => {
                 el.style.display = (role === 'admin') ? 'block' : 'none';
             });
@@ -232,7 +228,7 @@ function loadRoundsForBooking() {
     document.getElementById('round-select').innerHTML = '<option value="">-- เลือกรอบ --</option>';
     document.getElementById('seat-map').innerHTML = '<div class="text-center text-muted w-100 py-5">กรุณาเลือกรอบกิจกรรมเพื่อดูที่นั่ง</div>';
     
-    // เคลียร์ตัวแปรและหยุด Auto-Refresh ป้องกันที่นั่งของฐานเก่าโผล่มาหลอกตา
+    // 🌟 แก้ไข: เคลียร์ตัวแปรและหยุด Auto-Refresh ป้องกันที่นั่งของฐานเก่าโผล่มาหลอกตา
     if(seatRefreshInterval) clearInterval(seatRefreshInterval);
     window.currentSeatsData = null;
     if (currentRoundListenerId) {
@@ -272,11 +268,15 @@ async function fetchUserData() {
     } catch (err) { alert("เกิดข้อผิดพลาดในการดึงข้อมูล"); }
 }
 
+// เพิ่มตัวแปรไว้เหนือฟังก์ชัน loadSeats
+let currentRoundListenerId = null; 
+let seatRefreshInterval = null; 
+
 function loadSeats() {
     const roundId = document.getElementById('round-select').value;
     if(!roundId) return;
 
-    // ยกเลิก Listener ของรอบเก่าก่อน ป้องกันข้อมูลตีกันและลดโหลด
+    // 🌟 แก้ไข: ยกเลิก Listener ของรอบเก่าก่อน ป้องกันข้อมูลตีกันและลดโหลด
     if (currentRoundListenerId) {
         db.ref(`seats/${currentRoundListenerId}`).off('value');
     }
@@ -286,20 +286,17 @@ function loadSeats() {
 
     const map = document.getElementById('seat-map');
     
-    // ฟังก์ชันย่อยสำหรับวาดที่นั่ง
     const renderSeats = (seats) => {
         if(!map) return;
         map.innerHTML = '';
         if (!seats) return;
 
         const now = Date.now();
-        const TIMEOUT = 60000; // 1 นาที (60000 ms)
+        const TIMEOUT = 60000;
 
-        // 1. คัดกรองและเรียงลำดับที่นั่งจากน้อยไปมาก
         let seatKeys = Object.keys(seats).filter(key => key.startsWith('seat_'));
         seatKeys.sort((a, b) => parseInt(a.replace('seat_', '')) - parseInt(b.replace('seat_', '')));
 
-        // 2. วนลูปวาดที่นั่ง
         seatKeys.forEach(key => {
             const s = seats[key];
             const div = document.createElement('div');
@@ -321,35 +318,25 @@ function loadSeats() {
             div.innerText = key.replace('seat_', '');
             
             div.onclick = () => {
-                if (statusClass === 'available') {
-                    selectSeat(roundId, key);
-                } else if (statusClass === 'my-selection') {
-                    deselectSeat(roundId, key);
-                } else if (statusClass === 'booked') {
-                    alert("ที่นั่งนี้ถูกจองไปแล้ว");
-                } else if (statusClass === 'selecting') {
-                    alert("มีเจ้าหน้าที่ท่านอื่นกำลังทำรายการที่นั่งนี้");
-                } else if (statusClass === 'disabled') {
-                    alert("ที่นั่งนี้ถูกปิดการใช้งาน");
-                }
+                if (statusClass === 'available') selectSeat(roundId, key);
+                else if (statusClass === 'my-selection') deselectSeat(roundId, key);
+                else if (statusClass === 'booked') alert("ที่นั่งนี้ถูกจองไปแล้ว");
+                else if (statusClass === 'selecting') alert("มีเจ้าหน้าที่ท่านอื่นกำลังทำรายการที่นั่งนี้");
+                else if (statusClass === 'disabled') alert("ที่นั่งนี้ถูกปิดการใช้งาน");
             };
 
             map.appendChild(div);
         });
     };
 
-    // เปิดรับข้อมูล Realtime จาก Firebase
     db.ref(`seats/${roundId}`).on('value', (snap) => {
         const seats = snap.val();
-        window.currentSeatsData = seats; // เก็บข้อมูลล่าสุดไว้ในตัวแปรสำหรับอัปเดต UI อัตโนมัติ
+        window.currentSeatsData = seats;
         renderSeats(seats);
     });
 
-    // ระบบ Auto-Refresh: สั่งรีเฟรชหน้าจอที่นั่งทุกๆ 10 วินาที
     seatRefreshInterval = setInterval(() => {
-        if(window.currentSeatsData) {
-            renderSeats(window.currentSeatsData);
-        }
+        if(window.currentSeatsData) renderSeats(window.currentSeatsData);
     }, 10000); 
 }
 
@@ -398,10 +385,10 @@ function confirmBooking() {
     const seatRef = db.ref(`seats/${roundId}/${selectedSeatId}`);
     
     seatRef.transaction((currentData) => {
-        // ป้องกัน Error "Cannot read property 'status' of null" 
+        // 🌟 แก้ไข: ป้องกัน Error "Cannot read property 'status' of null" 
+        // เพราะ Firebase Transaction บางครั้งจะคืนค่า null ในการตรวจสอบรอบแรก
         if (currentData === null) return null; 
         
-        // ถ้าโดนคนอื่นจองตัดหน้าไปแล้ว ให้ยกเลิก
         if (currentData.status === 'booked') return; 
 
         currentData.status = 'booked';
@@ -410,6 +397,7 @@ function confirmBooking() {
         currentData.selection_time = null;
         return currentData;
     }, (error, committed) => {
+        // โค้ดส่วนหลังจากนี้ของคุณเหมือนเดิม
         if (committed) {
             const bookingId = "BK-" + Date.now();
             db.ref(`bookings/${bookingId}`).set({
@@ -419,12 +407,9 @@ function confirmBooking() {
                 timestamp: Date.now()
             });
             
-            // ตัดสต๊อกที่นั่ง
             db.ref(`rounds/${roundId}/available_seats`).transaction(c => (c || 0) - 1);
-
             generateQR(bookingId);
             
-            // ล้างฟอร์ม
             selectedSeatId = null; 
             document.getElementById('national-id').value = '';
             document.getElementById('user-data-form').style.display = 'none';
@@ -516,14 +501,14 @@ async function createStaff() {
     });
 
     try {
-        // 1. ป้องกันไม่ให้ Secondary App จำการล็อกอิน
+        // 1. ป้องกันไม่ให้ Secondary App จำการล็อกอิน (ไม่ให้ไปเตะ Admin ปัจจุบันหลุด)
         await secondaryApp.auth().setPersistence(firebase.auth.Auth.Persistence.NONE);
         
         // 2. ใช้ Secondary App สร้าง Auth
         const userCred = await secondaryApp.auth().createUserWithEmailAndPassword(email, password);
         const newUid = userCred.user.uid;
 
-        // 3. เตรียมข้อมูลที่จะบันทึก
+        // 3. เตรียมข้อมูลที่จะบันทึก (ถ้าไม่มีการติ๊กเลือกฐาน จะไม่ส่ง Object ว่างๆ ป้องกัน Error)
         const userData = {
             email: email,
             role: role
@@ -532,7 +517,7 @@ async function createStaff() {
             userData.allowed_stations = allowed_stations;
         }
 
-        // 4. บันทึกข้อมูลลง Database
+        // 4. บันทึกข้อมูลลง Database โดยใช้ db (Primary App ของ Admin)
         await db.ref(`users/${newUid}`).set(userData);
 
         alert("เพิ่มเจ้าหน้าที่สำเร็จ!");
@@ -615,12 +600,12 @@ async function loadAllBookings() {
         for (let bId in bookings) {
             const b = bookings[bId];
             
-            // ป้องกัน Error กรณีข้อมูลไม่ครบ
+            // ป้องกัน Error กรณีข้อมูลไม่ครบ (ดัก Undefined)
             const roundId = b.round_id || 'ไม่ระบุ';
             const round = rounds[roundId] || {};
             const stName = stations[round.station_id]?.name || 'ไม่ทราบฐาน';
             
-            // แก้ปัญหา Error .replace() ตรวจสอบก่อนว่ามี seat_id หรือไม่
+            // 🌟 แก้ปัญหา Error .replace() ตรงนี้: ตรวจสอบก่อนว่ามี seat_id หรือไม่
             const seatName = b.seat_id ? String(b.seat_id).replace('seat_', '') : '<span class="text-danger">ไม่ระบุที่นั่ง</span>';
             const nationalId = b.national_id || 'ไม่มีข้อมูล';
             
@@ -653,18 +638,16 @@ async function deleteBooking(bookingId, roundId, seatId) {
     if(!confirm("ยืนยันการลบรายการนี้? ที่นั่งจะถูกคืนกลับสู่ระบบ")) return;
 
     try {
-        // 1. ลบการจอง
         await db.ref(`bookings/${bookingId}`).remove();
         
-        // 2. ตรวจสอบให้ชัวร์ว่ามี seatId จริงๆ ถึงจะคืนค่าที่นั่ง ป้องกันลบที่นั่งทั้งฐาน
+        // 🌟 แก้ไข: ตรวจสอบให้ชัวร์ว่ามี seatId จริงๆ ถึงจะคืนค่าที่นั่ง ป้องกันลบที่นั่งทั้งฐาน
         if (seatId && seatId !== 'undefined' && seatId !== 'null') {
             await db.ref(`seats/${roundId}/${seatId}`).update({ status: 'available', booked_by: null });
-            // 3. คืนค่าที่นั่งว่าง +1
             await db.ref(`rounds/${roundId}/available_seats`).transaction(c => (c || 0) + 1);
         }
         
         alert("ลบและคืนที่นั่งสำเร็จ");
-        loadAllBookings(); // โหลดตารางใหม่
+        loadAllBookings(); 
     } catch (err) {
         alert("เกิดข้อผิดพลาด: " + err.message);
     }
@@ -685,9 +668,3 @@ db.ref('.info/connected').on('value', (snap) => {
         console.warn("🔴 ขาดการเชื่อมต่ออินเทอร์เน็ต หรือฐานข้อมูล");
     }
 });
-
-// เพิ่มฟังก์ชันนี้ลงไปในส่วนของ ระบบ Admin
-function loadAdminStationsTable() {
-    // โค้ดสำหรับดึงข้อมูล stations มาแสดงเป็นตาราง
-    console.log("กำลังโหลดตารางข้อมูลฐานกิจกรรม...");
-}
