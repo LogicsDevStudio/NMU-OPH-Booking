@@ -685,3 +685,9 @@ db.ref('.info/connected').on('value', (snap) => {
         console.warn("🔴 ขาดการเชื่อมต่ออินเทอร์เน็ต หรือฐานข้อมูล");
     }
 });
+
+// เพิ่มฟังก์ชันนี้ลงไปในส่วนของ ระบบ Admin
+function loadAdminStationsTable() {
+    // โค้ดสำหรับดึงข้อมูล stations มาแสดงเป็นตาราง
+    console.log("กำลังโหลดตารางข้อมูลฐานกิจกรรม...");
+}
